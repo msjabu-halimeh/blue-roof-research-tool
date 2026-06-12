@@ -153,15 +153,53 @@
 
   .run-all-btn{background:var(--navy);color:#fff;font-size:13px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:inherit;font-weight:500;transition:background .2s}
   .run-all-btn:hover{background:var(--navy3)}
+  .run-all-btn:disabled{opacity:.5;cursor:not-allowed}
+  .run-all-btn:disabled:hover{background:var(--navy)}
 
   .next-btn{background:var(--teal);color:#fff;padding:10px 22px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:inherit;transition:background .2s}
   .next-btn:hover{background:var(--teal2)}
+
+  /* Hint banner */
+  .hint-banner{display:flex;align-items:center;gap:8px;background:var(--amber-light);color:var(--amber);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.5;margin-bottom:16px}
+  .hint-banner i{font-size:15px;flex-shrink:0}
+
+  /* Mobile nav */
+  .menu-btn{display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--navy);cursor:pointer;font-size:18px;flex-shrink:0;font-family:inherit}
+  .menu-btn:hover{border-color:var(--teal);color:var(--teal2)}
+  .topbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+  .sidebar-overlay{display:none}
+
+  @media (max-width: 860px){
+    .shell{grid-template-columns:1fr}
+    .sidebar{
+      position:fixed;top:0;left:0;height:100vh;width:260px;z-index:1000;
+      transform:translateX(-100%);transition:transform .25s ease;box-shadow:2px 0 24px rgba(0,0,0,.25);
+    }
+    .sidebar.open{transform:translateX(0)}
+    .sidebar-overlay{
+      display:block;position:fixed;inset:0;background:rgba(11,31,58,.45);z-index:999;
+      opacity:0;pointer-events:none;transition:opacity .25s ease;
+    }
+    .sidebar-overlay.visible{opacity:1;pointer-events:auto}
+    .menu-btn{display:flex}
+    .topbar-stage{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .content{padding:16px}
+    .topbar{padding:12px 16px}
+    .stat-row{grid-template-columns:repeat(2,1fr)}
+  }
+
+  @media (max-width: 480px){
+    .stat-row{grid-template-columns:1fr}
+    .panel-title{font-size:18px}
+    .progress-bar{width:80px}
+  }
 </style>
 </head>
 <body>
 <div class="shell">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo">Research AI</div>
       <div class="sidebar-title">Blue Roof<br>Research Tool</div>
@@ -177,7 +215,10 @@
   <!-- MAIN -->
   <main class="main">
     <div class="topbar">
-      <div class="topbar-stage" id="topbar-label"><strong>Stage 1</strong> &mdash; Lab data ingestion</div>
+      <div class="topbar-left">
+        <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()" aria-label="Toggle navigation"><i class="ti ti-menu-2" aria-hidden="true"></i></button>
+        <div class="topbar-stage" id="topbar-label"><strong>Stage 1</strong> &mdash; Lab data ingestion</div>
+      </div>
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
         <span class="progress-label" id="progress-label">0 / 9</span>
@@ -362,6 +403,7 @@ function panelStats(){return `<div class="stage-panel" id="panel-2">
     <div class="panel-title">Run analysis</div>
     <div class="panel-desc">Computes hydrological metrics directly from the data you ingested in Stage 1. Metrics that need a reference dataset not present in your input are reported as unavailable rather than guessed.</div>
   </div>
+  <div class="hint-banner" id="analysis-hint"><i class="ti ti-info-circle" aria-hidden="true"></i> Run Stage 1 (data ingestion) first so there's data to analyse.</div>
   <div class="card">
     <div class="card-title"><i class="ti ti-settings" aria-hidden="true"></i> Analysis settings</div>
     <div class="toggle-row">
@@ -381,7 +423,7 @@ function panelStats(){return `<div class="stage-panel" id="panel-2">
       <label class="toggle"><input type="checkbox" id="pollutant-toggle"><span class="toggle-slider"></span></label>
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runAnalysis()">
+      <button class="run-all-btn" id="analysis-run-btn" onclick="runAnalysis()">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run analysis
       </button>
     </div>
@@ -462,6 +504,7 @@ function panelViz(){return `<div class="stage-panel" id="panel-5">
     <div class="panel-title">Generate figures</div>
     <div class="panel-desc">Publication-ready figures generated programmatically from your lab data. Hydrographs and retention heatmaps are the signature figures in blue roof literature.</div>
   </div>
+  <div class="hint-banner" id="viz-hint"><i class="ti ti-info-circle" aria-hidden="true"></i> Run Stage 1 (data ingestion) first so there's data to plot.</div>
   <div class="card">
     <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Figure selection</div>
     <div class="toggle-row">
@@ -481,7 +524,7 @@ function panelViz(){return `<div class="stage-panel" id="panel-5">
       <label class="toggle"><input type="checkbox" id="scatter-toggle"><span class="toggle-slider"></span></label>
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runVisualization()">
+      <button class="run-all-btn" id="viz-run-btn" onclick="runVisualization()">
         <i class="ti ti-player-play" aria-hidden="true"></i> Generate figures
       </button>
     </div>
@@ -723,6 +766,31 @@ function goToStage(idx){
   const s = STAGES[idx];
   document.getElementById('topbar-label').innerHTML = `<strong>Stage ${idx+1}</strong> &mdash; ${s.label}`;
   window.scrollTo && document.querySelector('.content').scrollTo(0,0);
+  updateStageGates();
+  if(window.innerWidth <= 860) closeSidebar();
+}
+
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('visible');
+}
+
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+function updateStageGates(){
+  const hasData = !!pipelineData.ingest;
+  [
+    {hint:'analysis-hint', btn:'analysis-run-btn'},
+    {hint:'viz-hint', btn:'viz-run-btn'}
+  ].forEach(({hint,btn})=>{
+    const hintEl = document.getElementById(hint);
+    const btnEl = document.getElementById(btn);
+    if(hintEl) hintEl.style.display = hasData ? 'none' : 'flex';
+    if(btnEl) btnEl.disabled = !hasData;
+  });
 }
 
 function runIngestion(){
@@ -772,6 +840,7 @@ function runIngestion(){
   lines.push('Data is ready for statistical analysis in Stage 3.');
   outEl.textContent = lines.join('\n');
 
+  updateStageGates();
   showOutput(0);
 }
 
