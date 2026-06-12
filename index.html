@@ -76,13 +76,8 @@
   .card-title{font-size:13px;font-weight:500;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:8px}
   .card-title i{color:var(--teal);font-size:16px}
 
-  /* Function chips */
-  .fn-grid{display:flex;flex-wrap:wrap;gap:8px}
-  .fn-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:monospace;background:var(--sand);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--navy2);cursor:pointer;transition:all .15s}
-  .fn-chip:hover{background:var(--teal-light);border-color:var(--teal);color:var(--teal2)}
-  .fn-chip.running{background:var(--teal-light);border-color:var(--teal);color:var(--teal2)}
-  .fn-chip.done{background:var(--green-light);border-color:var(--green);color:var(--green)}
-  .fn-chip i{font-size:13px}
+  /* Charts */
+  .chart-wrap{position:relative;height:260px;margin-top:14px}
 
   /* Input areas */
   .input-area{width:100%;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;font-family:inherit;color:var(--navy);background:#fff;resize:vertical;min-height:100px;outline:none;transition:border-color .2s}
@@ -192,76 +187,70 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
 const STAGES = [
   {
     id:'ingest', num:'01', label:'Lab data ingestion',
     color:'teal', eyebrow:'Stage 1 of 9',
     desc:'Upload raw sensor outputs from your blue roof instrumentation. The tool validates units, detects outliers, and normalises across measurement points.',
-    fns:['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'],
     panel:'ingest'
   },
   {
     id:'lit', num:'02', label:'Literature review',
     color:'blue', eyebrow:'Stage 2 of 9',
     desc:'Automated search across Scopus, Web of Science, and Google Scholar. Screens abstracts for relevance to your study parameters and builds a citation map.',
-    fns:['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'],
     panel:'lit'
   },
   {
     id:'stats', num:'03', label:'Statistical analysis',
     color:'purple', eyebrow:'Stage 3 of 9',
     desc:'Domain-specific functions for blue roof hydrology: runoff coefficient, peak flow attenuation, water retention volume, and pollutant load reduction.',
-    fns:['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'],
     panel:'stats'
   },
   {
     id:'context', num:'04', label:'Contextualisation',
     color:'amber', eyebrow:'Stage 4 of 9',
     desc:'Compares your results to published benchmarks and identifies where your findings diverge. Surfaces candidate explanations for the discussion section.',
-    fns:['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'],
     panel:'context'
   },
   {
     id:'draft', num:'05', label:'Paper drafting',
     color:'coral', eyebrow:'Stage 5 of 9',
     desc:'Generates each section independently. Methods and Results are written from data; Discussion draws on the contextualisation layer. References are auto-formatted.',
-    fns:['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'],
     panel:'draft'
   },
   {
     id:'viz', num:'06', label:'Visualisation',
     color:'green', eyebrow:'Stage 6 of 9',
     desc:'Produces publication-ready figures: hydrographs, retention heatmaps, and comparison tables. All outputs are exported at 300 dpi.',
-    fns:['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'],
     panel:'viz'
   },
   {
     id:'qa', num:'07', label:'Quality assurance',
     color:'gray', eyebrow:'Stage 7 of 9',
     desc:'Audits every claim in the discussion against your data and cited literature. Flags unsupported assertions and verifies data traceability before submission.',
-    fns:['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'],
     panel:'qa'
   },
   {
     id:'journal', num:'08', label:'Journal suggestion', isNew:true,
     color:'pink', eyebrow:'Stage 8 of 9',
     desc:'Scores the manuscript against journal scope, impact factor, and open-access requirements. Flags predatory publishers and estimates acceptance probability.',
-    fns:['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'],
     panel:'journal'
   },
   {
     id:'prep', num:'09', label:'Journal preparation',
     color:'teal', eyebrow:'Stage 9 of 9',
     desc:'Reformats the manuscript to the target journal\'s style guide, generates the cover letter, and compiles the supplementary data package.',
-    fns:['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'],
     panel:'prep'
   }
 ];
 
 let currentStage = 0;
 let completedStages = new Set();
-let runningFns = {};
+let pipelineData = {};
+let hydroChart = null;
+let scatterChart = null;
 
 function buildSidebar(){
   const nav = document.getElementById('pipeline-nav');
@@ -298,35 +287,32 @@ function panelIngest(){return `<div class="stage-panel" id="panel-0">
   <div class="panel-header">
     <div class="panel-eyebrow">Stage 1 of 9 &mdash; Lab data ingestion</div>
     <div class="panel-title">Upload lab results</div>
-    <div class="panel-desc">Paste or upload raw sensor data from your blue roof monitoring rig. The tool will detect units, flag anomalies, and normalise across all measurement points before any analysis runs.</div>
+    <div class="panel-desc">Paste raw sensor data from your blue roof monitoring rig as CSV. The tool parses it, flags outliers using the IQR method, and reports the channels it detected.</div>
   </div>
   <div class="card">
     <div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Raw sensor data</div>
-    <label class="input-label">Paste CSV or structured data output</label>
-    <textarea class="input-area" id="lab-input" placeholder="timestamp, rainfall_mm, outflow_L/s, retention_%, temp_C&#10;2026-05-14 09:00, 12.4, 0.82, 93.4, 18.2&#10;2026-05-14 09:15, 14.1, 0.91, 92.8, 18.4&#10;..."></textarea>
+    <label class="input-label">CSV data (edit the sample below or paste your own)</label>
+    <textarea class="input-area" id="lab-input" rows="6">timestamp, rainfall_mm, outflow_L/s, retention_%, temp_C
+2026-05-14 09:00, 12.4, 0.82, 93.4, 18.2
+2026-05-14 09:15, 14.1, 0.91, 92.8, 18.4
+2026-05-14 09:30, 18.6, 1.40, 90.1, 18.6
+2026-05-14 09:45, 22.3, 4.85, 78.3, 18.9
+2026-05-14 10:00, 9.8, 0.65, 94.2, 19.1
+2026-05-14 10:15, 6.2, 0.41, 95.5, 19.3
+2026-05-14 10:30, 3.1, 0.22, 96.8, 19.4
+2026-05-14 10:45, 1.0, 0.08, 98.1, 19.5
+2026-05-14 11:00, 0.5, 0.04, 98.6, 19.6
+2026-05-14 11:15, 0.2, 0.02, 98.9, 19.7</textarea>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(0,['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'])">
-        <i class="ti ti-player-play" aria-hidden="true"></i> Run all ingestion functions
+      <button class="run-all-btn" onclick="runIngestion()">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Parse and validate data
       </button>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-0">
-      ${fnChips(0,['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'])}
     </div>
   </div>
   <div class="card" id="output-card-0" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Ingestion results</div>
-    <div class="stat-row">
-      <div class="stat-card"><div class="stat-val">847</div><div class="stat-lbl">Rows parsed</div></div>
-      <div class="stat-card"><div class="stat-val" style="color:var(--amber)">3</div><div class="stat-lbl">Outliers flagged</div></div>
-      <div class="stat-card"><div class="stat-val" style="color:var(--teal)">100%</div><div class="stat-lbl">Unit normalised</div></div>
-    </div>
-    <div class="output-box">Data validated. 847 timestep records ingested across 5 sensor channels.
-3 outliers flagged at t=09:45, t=14:20, t=22:10 — likely sensor dropout events.
-All flow rates converted to L/s. Rainfall normalised to mm/15min intervals.
-Ready to proceed to statistical analysis.</div>
+    <div class="stat-row" id="ingest-stats"></div>
+    <div class="output-box" id="ingest-output"></div>
   </div>
   <div class="btn-row"><button class="next-btn" onclick="completeAndNext(0)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: literature review</button></div>
 </div>`;}
@@ -350,14 +336,10 @@ function panelLit(){return `<div class="stage-panel" id="panel-1">
       <input type="number" value="2026" style="width:90px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;color:var(--navy)">
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(1,['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'])">
+      <button class="run-all-btn" onclick="simulateRun(1, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run literature review
       </button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-1">${fnChips(1,['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'])}</div>
   </div>
   <div class="card" id="output-card-1" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Literature results</div>
@@ -378,47 +360,36 @@ function panelStats(){return `<div class="stage-panel" id="panel-2">
   <div class="panel-header">
     <div class="panel-eyebrow">Stage 3 of 9 &mdash; Statistical analysis</div>
     <div class="panel-title">Run analysis</div>
-    <div class="panel-desc">Domain-specific hydrological calculations. Each function targets a named metric from the blue roof literature — outputs are directly interpretable against published benchmarks.</div>
+    <div class="panel-desc">Computes hydrological metrics directly from the data you ingested in Stage 1. Metrics that need a reference dataset not present in your input are reported as unavailable rather than guessed.</div>
   </div>
   <div class="card">
     <div class="card-title"><i class="ti ti-settings" aria-hidden="true"></i> Analysis settings</div>
     <div class="toggle-row">
-      <div><div class="toggle-info">Runoff coefficient (Cr)</div><div class="toggle-sub">Ratio of outflow to total rainfall input</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+      <div><div class="toggle-info">Runoff coefficient (Cr)</div><div class="toggle-sub">Approximated as 1 - mean retention rate</div></div>
+      <label class="toggle"><input type="checkbox" id="cr-toggle" checked><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
       <div><div class="toggle-info">Peak flow attenuation</div><div class="toggle-sub">Reduction in peak discharge vs. conventional roof</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="peak-toggle" checked><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
-      <div><div class="toggle-info">Water retention volume</div><div class="toggle-sub">Total stormwater retained per event</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+      <div><div class="toggle-info">Water retention rate</div><div class="toggle-sub">Mean retention across all rows</div></div>
+      <label class="toggle"><input type="checkbox" id="retention-toggle" checked><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
       <div><div class="toggle-info">Pollutant load reduction</div><div class="toggle-sub">TSS, TN, TP removal rates</div></div>
-      <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="pollutant-toggle"><span class="toggle-slider"></span></label>
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(2,['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'])">
+      <button class="run-all-btn" onclick="runAnalysis()">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run analysis
       </button>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-2">${fnChips(2,['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'])}</div>
-  </div>
   <div class="card" id="output-card-2" style="display:none">
     <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Analysis results</div>
-    <div class="stat-row">
-      <div class="stat-card"><div class="stat-val">0.08</div><div class="stat-lbl">Runoff coefficient</div></div>
-      <div class="stat-card"><div class="stat-val">67%</div><div class="stat-lbl">Peak attenuation</div></div>
-      <div class="stat-card"><div class="stat-val">89.2%</div><div class="stat-lbl">Retention rate</div></div>
-    </div>
-    <div class="output-box">Runoff coefficient Cr = 0.08 (SD ±0.02) across 23 storm events.
-Peak flow attenuation: 67% reduction vs. impervious reference (p &lt; 0.001).
-Mean retention: 89.2%. Linear regression shows retention declines 0.4% per mm of antecedent rainfall (R² = 0.71).
-Water balance closure: 97.3%. Results ready for contextualisation.</div>
+    <div class="stat-row" id="stats-stats"></div>
+    <div class="output-box" id="stats-output"></div>
   </div>
   <div class="btn-row"><button class="next-btn" onclick="completeAndNext(2)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: contextualisation</button></div>
 </div>`;}
@@ -430,10 +401,9 @@ function panelContext(){return `<div class="stage-panel" id="panel-3">
     <div class="panel-desc">Your results are compared against the benchmarks identified in the literature review. The tool flags where your findings diverge and generates candidate explanations for the discussion.</div>
   </div>
   <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-3">${fnChips(3,['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'])}</div>
+    <div class="card-title"><i class="ti ti-wand" aria-hidden="true"></i> Generate interpretation</div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(3,['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'])">
+      <button class="run-all-btn" onclick="simulateRun(3, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run contextualisation
       </button>
     </div>
@@ -465,14 +435,10 @@ function panelDraft(){return `<div class="stage-panel" id="panel-4">
       <option>Science of the Total Environment</option>
     </select>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(4,['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'])">
+      <button class="run-all-btn" onclick="simulateRun(4, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Draft all sections
       </button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-4">${fnChips(4,['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'])}</div>
   </div>
   <div class="card" id="output-card-4" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Draft status</div>
@@ -499,8 +465,8 @@ function panelViz(){return `<div class="stage-panel" id="panel-5">
   <div class="card">
     <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Figure selection</div>
     <div class="toggle-row">
-      <div><div class="toggle-info">Inflow vs. outflow hydrograph</div><div class="toggle-sub">Storm event time series</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+      <div><div class="toggle-info">Inflow vs. outflow hydrograph</div><div class="toggle-sub">Storm event time series from your data</div></div>
+      <label class="toggle"><input type="checkbox" id="hydro-toggle" checked><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
       <div><div class="toggle-info">Retention rate heatmap</div><div class="toggle-sub">By event size and antecedent conditions</div></div>
@@ -511,26 +477,20 @@ function panelViz(){return `<div class="stage-panel" id="panel-5">
       <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
     </div>
     <div class="toggle-row">
-      <div><div class="toggle-info">Regression scatter plot</div><div class="toggle-sub">Retention vs. antecedent rainfall</div></div>
-      <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+      <div><div class="toggle-info">Regression scatter plot</div><div class="toggle-sub">Retention vs. antecedent rainfall, fitted from your data</div></div>
+      <label class="toggle"><input type="checkbox" id="scatter-toggle"><span class="toggle-slider"></span></label>
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(5,['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'])">
+      <button class="run-all-btn" onclick="runVisualization()">
         <i class="ti ti-player-play" aria-hidden="true"></i> Generate figures
       </button>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-5">${fnChips(5,['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'])}</div>
-  </div>
   <div class="card" id="output-card-5" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Figures generated</div>
-    <div class="output-box">3 figures exported at 300 dpi (TIFF and EPS formats).
-Fig. 1 — Inflow/outflow hydrograph across 23 storm events.
-Fig. 2 — Retention heatmap (event depth × antecedent moisture index).
-Fig. 3 — Comparison table: this study vs. Stovin 2017, Shafique 2018, Johannessen 2019.
-All figures meet journal minimum resolution requirements.</div>
+    <div class="output-box" id="viz-output"></div>
+    <div class="chart-wrap"><canvas id="hydrograph-canvas"></canvas></div>
+    <div class="chart-wrap"><canvas id="scatter-canvas"></canvas></div>
   </div>
   <div class="btn-row"><button class="next-btn" onclick="completeAndNext(5)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: quality assurance</button></div>
 </div>`;}
@@ -542,10 +502,9 @@ function panelQA(){return `<div class="stage-panel" id="panel-6">
     <div class="panel-desc">Every claim in the discussion is traced back to either your lab data or a cited source. Orphaned assertions are flagged before submission.</div>
   </div>
   <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-6">${fnChips(6,['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'])}</div>
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Run audit</div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(6,['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'])">
+      <button class="run-all-btn" onclick="simulateRun(6, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run QA audit
       </button>
     </div>
@@ -593,14 +552,10 @@ function panelJournal(){return `<div class="stage-panel" id="panel-7">
       <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
     </div>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(7,['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'])">
+      <button class="run-all-btn" onclick="simulateRun(7, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Run journal scoring
       </button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-7">${fnChips(7,['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'])}</div>
   </div>
   <div class="card" id="output-card-7" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Journal shortlist</div>
@@ -659,14 +614,10 @@ function panelPrep(){return `<div class="stage-panel" id="panel-8">
       <option>Urban Water Journal (Taylor & Francis)</option>
     </select>
     <div class="btn-row">
-      <button class="run-all-btn" onclick="runFunctions(8,['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'])">
+      <button class="run-all-btn" onclick="simulateRun(8, this)">
         <i class="ti ti-player-play" aria-hidden="true"></i> Prepare submission
       </button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
-    <div class="fn-grid" id="fns-8">${fnChips(8,['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'])}</div>
   </div>
   <div class="card" id="output-card-8" style="display:none">
     <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Submission package ready</div>
@@ -687,8 +638,80 @@ Word count: 4,820 / 6,000 limit. Ready for upload to Editorial Manager.</div>
   </div>
 </div>`;}
 
-function fnChips(stageIdx, fns){
-  return fns.map(fn=>`<span class="fn-chip" id="fn-${stageIdx}-${fn.replace(/[()]/g,'')}" onclick="runSingleFn(${stageIdx},'${fn}')"><i class="ti ti-terminal-2" aria-hidden="true"></i>${fn}</span>`).join('');
+function simulateRun(stageIdx, btn){
+  if(!btn){ showOutput(stageIdx); return; }
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="loader"><span></span><span></span><span></span></span> Working...`;
+  setTimeout(()=>{
+    btn.disabled = false;
+    btn.innerHTML = original;
+    showOutput(stageIdx);
+  }, 1100);
+}
+
+function parseCSV(text){
+  const lines = text.trim().split('\n').map(l=>l.trim()).filter(l=>l.length);
+  if(lines.length < 2) return null;
+  const headers = lines[0].split(',').map(h=>h.trim());
+  const rows = lines.slice(1).map(line=>{
+    const cells = line.split(',').map(c=>c.trim());
+    const row = {};
+    headers.forEach((h,i)=>{
+      const raw = cells[i] === undefined ? '' : cells[i];
+      const num = Number(raw);
+      row[h] = (raw !== '' && !isNaN(num)) ? num : raw;
+    });
+    return row;
+  });
+  return {headers, rows};
+}
+
+function findColumn(headers, keyword){
+  return headers.find(h=>h.toLowerCase().includes(keyword.toLowerCase()));
+}
+
+function mean(arr){
+  return arr.reduce((a,b)=>a+b, 0) / arr.length;
+}
+
+function quantile(sorted, q){
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return sorted[base+1] !== undefined ? sorted[base] + rest*(sorted[base+1]-sorted[base]) : sorted[base];
+}
+
+function detectOutliers(values){
+  const sorted = [...values].sort((a,b)=>a-b);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1;
+  const lower = q1 - 1.5*iqr;
+  const upper = q3 + 1.5*iqr;
+  const outliers = [];
+  values.forEach((v,i)=>{ if(v < lower || v > upper) outliers.push(i); });
+  return outliers;
+}
+
+function linearRegression(xs, ys){
+  const n = xs.length;
+  const xMean = mean(xs), yMean = mean(ys);
+  let num = 0, den = 0;
+  for(let i=0;i<n;i++){
+    num += (xs[i]-xMean)*(ys[i]-yMean);
+    den += (xs[i]-xMean)**2;
+  }
+  const slope = den === 0 ? 0 : num/den;
+  const intercept = yMean - slope*xMean;
+  let ssTot = 0, ssRes = 0;
+  for(let i=0;i<n;i++){
+    const pred = slope*xs[i] + intercept;
+    ssRes += (ys[i]-pred)**2;
+    ssTot += (ys[i]-yMean)**2;
+  }
+  const r2 = ssTot === 0 ? 1 : 1 - ssRes/ssTot;
+  return {slope, intercept, r2};
 }
 
 function goToStage(idx){
@@ -702,25 +725,195 @@ function goToStage(idx){
   window.scrollTo && document.querySelector('.content').scrollTo(0,0);
 }
 
-function runSingleFn(stageIdx, fn){
-  const id = `fn-${stageIdx}-${fn.replace(/[()]/g,'')}`;
-  const el = document.getElementById(id);
-  if(!el) return;
-  el.classList.add('running');
-  el.innerHTML = `<span class="loader"><span></span><span></span><span></span></span> ${fn}`;
-  setTimeout(()=>{
-    el.classList.remove('running');
-    el.classList.add('done');
-    el.innerHTML = `<i class="ti ti-check" aria-hidden="true"></i> ${fn}`;
-  }, 900 + Math.random()*600);
+function runIngestion(){
+  const text = document.getElementById('lab-input').value;
+  const parsed = parseCSV(text);
+  const statsEl = document.getElementById('ingest-stats');
+  const outEl = document.getElementById('ingest-output');
+
+  if(!parsed){
+    statsEl.innerHTML = '';
+    outEl.textContent = 'Could not parse the data. Make sure the first line contains comma-separated column headers, with at least one data row below it.';
+    showOutput(0);
+    return;
+  }
+
+  const {headers, rows} = parsed;
+  const numericCols = headers.filter(h => rows.every(r => typeof r[h] === 'number'));
+  const outlierRows = new Set();
+  const colSummary = numericCols.map(col=>{
+    const values = rows.map(r=>r[col]);
+    const outlierIdx = detectOutliers(values);
+    outlierIdx.forEach(i=>outlierRows.add(i));
+    return {col, values, min:Math.min(...values), max:Math.max(...values), mean:mean(values), outlierIdx};
+  });
+
+  pipelineData.ingest = {headers, rows, numericCols, colSummary, outlierRows};
+
+  statsEl.innerHTML = `
+    <div class="stat-card"><div class="stat-val">${rows.length}</div><div class="stat-lbl">Rows parsed</div></div>
+    <div class="stat-card"><div class="stat-val">${numericCols.length}</div><div class="stat-lbl">Numeric channels</div></div>
+    <div class="stat-card"><div class="stat-val">${outlierRows.size}</div><div class="stat-lbl">Outlier rows flagged</div></div>
+  `;
+
+  const lines = [];
+  lines.push(`Detected ${headers.length} columns: ${headers.join(', ')}.`);
+  lines.push(`${numericCols.length} numeric channel(s): ${numericCols.length ? numericCols.join(', ') : 'none'}.`);
+  colSummary.forEach(s=>{
+    lines.push(`${s.col}: min ${s.min}, max ${s.max}, mean ${s.mean.toFixed(2)}.`);
+  });
+  if(outlierRows.size){
+    const labelCol = headers[0];
+    const desc = [...outlierRows].sort((a,b)=>a-b).map(i=>`row ${i+1} (${labelCol}=${rows[i][labelCol]})`);
+    lines.push(`Outliers (1.5×IQR rule) found in: ${desc.join('; ')}.`);
+  } else {
+    lines.push('No outliers detected using the 1.5×IQR rule.');
+  }
+  lines.push('Data is ready for statistical analysis in Stage 3.');
+  outEl.textContent = lines.join('\n');
+
+  showOutput(0);
 }
 
-function runFunctions(stageIdx, fns){
-  fns.forEach((fn,i)=>{
-    setTimeout(()=>runSingleFn(stageIdx,fn), i*500);
-  });
-  const total = fns.length * 500 + 1500;
-  setTimeout(()=>showOutput(stageIdx), total);
+function runAnalysis(){
+  const statsEl = document.getElementById('stats-stats');
+  const outEl = document.getElementById('stats-output');
+  const ingest = pipelineData.ingest;
+
+  if(!ingest){
+    statsEl.innerHTML = '';
+    outEl.textContent = 'No ingested data found. Go to Stage 1 and parse your lab data first.';
+    showOutput(2);
+    return;
+  }
+
+  const {headers, rows} = ingest;
+  const rainfallCol = findColumn(headers, 'rainfall');
+  const retentionCol = findColumn(headers, 'retention');
+  const statCards = [];
+  const lines = [];
+
+  if(retentionCol && document.getElementById('retention-toggle').checked){
+    const values = rows.map(r=>r[retentionCol]);
+    const avgRetention = mean(values);
+    statCards.push(`<div class="stat-card"><div class="stat-val">${avgRetention.toFixed(1)}%</div><div class="stat-lbl">Mean retention</div></div>`);
+    lines.push(`Mean ${retentionCol} across ${rows.length} rows: ${avgRetention.toFixed(2)}%.`);
+
+    if(document.getElementById('cr-toggle').checked){
+      const cr = 1 - avgRetention/100;
+      statCards.push(`<div class="stat-card"><div class="stat-val">${cr.toFixed(2)}</div><div class="stat-lbl">Runoff coefficient (Cr)</div></div>`);
+      lines.push(`Runoff coefficient Cr = 1 - mean retention = ${cr.toFixed(3)}.`);
+    }
+
+    if(rainfallCol && document.getElementById('peak-toggle').checked){
+      let peakIdx = 0;
+      rows.forEach((r,i)=>{ if(r[rainfallCol] > rows[peakIdx][rainfallCol]) peakIdx = i; });
+      const peakRetention = rows[peakIdx][retentionCol];
+      statCards.push(`<div class="stat-card"><div class="stat-val">${peakRetention.toFixed(1)}%</div><div class="stat-lbl">Retention at peak rainfall</div></div>`);
+      lines.push(`Peak rainfall event was ${rows[peakIdx][rainfallCol]} (${rainfallCol}), retaining ${peakRetention}% (${retentionCol}) at that timestep.`);
+    }
+
+    if(rainfallCol){
+      const xs = rows.map(r=>r[rainfallCol]);
+      const ys = values;
+      const {slope, intercept, r2} = linearRegression(xs, ys);
+      pipelineData.regression = {xCol:rainfallCol, yCol:retentionCol, slope, intercept, r2};
+      lines.push(`Linear regression: ${retentionCol} = ${slope.toFixed(3)} × ${rainfallCol} + ${intercept.toFixed(2)} (R² = ${r2.toFixed(3)}).`);
+    }
+  } else {
+    lines.push('No retention column found in the ingested data — retention, runoff coefficient and peak attenuation could not be computed.');
+  }
+
+  if(document.getElementById('pollutant-toggle').checked){
+    lines.push('Pollutant load reduction (TSS/TN/TP): not available — the ingested data does not contain pollutant concentration columns.');
+  }
+
+  if(ingest.outlierRows.size){
+    lines.push(`Note: ${ingest.outlierRows.size} row(s) flagged as outliers in Stage 1 were included in these calculations. Remove them in Stage 1 and re-run if they represent sensor error.`);
+  }
+
+  statsEl.innerHTML = statCards.join('');
+  outEl.textContent = lines.join('\n');
+  showOutput(2);
+}
+
+function runVisualization(){
+  const outEl = document.getElementById('viz-output');
+  const hydroCanvas = document.getElementById('hydrograph-canvas');
+  const scatterCanvas = document.getElementById('scatter-canvas');
+  const ingest = pipelineData.ingest;
+
+  hydroCanvas.parentElement.style.display = 'none';
+  scatterCanvas.parentElement.style.display = 'none';
+  if(hydroChart){ hydroChart.destroy(); hydroChart = null; }
+  if(scatterChart){ scatterChart.destroy(); scatterChart = null; }
+
+  if(!ingest){
+    outEl.textContent = 'No ingested data found. Go to Stage 1 and parse your lab data first.';
+    showOutput(5);
+    return;
+  }
+
+  const {headers, rows} = ingest;
+  const timeCol = headers[0];
+  const rainfallCol = findColumn(headers, 'rainfall');
+  const outflowCol = findColumn(headers, 'outflow');
+  const retentionCol = findColumn(headers, 'retention');
+  const lines = [];
+
+  if(document.getElementById('hydro-toggle').checked && rainfallCol && outflowCol){
+    hydroCanvas.parentElement.style.display = 'block';
+    hydroChart = new Chart(hydroCanvas, {
+      type: 'line',
+      data: {
+        labels: rows.map(r=>String(r[timeCol])),
+        datasets: [
+          {label:rainfallCol, data:rows.map(r=>r[rainfallCol]), borderColor:'#2563eb', backgroundColor:'transparent', yAxisID:'y', tension:0.3},
+          {label:outflowCol, data:rows.map(r=>r[outflowCol]), borderColor:'#0d9488', backgroundColor:'transparent', yAxisID:'y1', tension:0.3}
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        scales: {
+          y: {type:'linear', position:'left', title:{display:true, text:rainfallCol}},
+          y1: {type:'linear', position:'right', title:{display:true, text:outflowCol}, grid:{drawOnChartArea:false}}
+        }
+      }
+    });
+    lines.push(`Hydrograph plotted: ${rainfallCol} vs ${outflowCol} across ${rows.length} timesteps.`);
+  }
+
+  if(document.getElementById('scatter-toggle').checked && rainfallCol && retentionCol){
+    scatterCanvas.parentElement.style.display = 'block';
+    const points = rows.map(r=>({x:r[rainfallCol], y:r[retentionCol]}));
+    const datasets = [{label:`${retentionCol} vs ${rainfallCol}`, data:points, backgroundColor:'#7c3aed'}];
+    const reg = pipelineData.regression;
+    if(reg){
+      const xs = points.map(p=>p.x);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      datasets.push({
+        label:'Linear fit', type:'line',
+        data:[{x:minX, y:reg.slope*minX+reg.intercept},{x:maxX, y:reg.slope*maxX+reg.intercept}],
+        borderColor:'#f97316', backgroundColor:'transparent', pointRadius:0
+      });
+    }
+    scatterChart = new Chart(scatterCanvas, {
+      type:'scatter',
+      data:{datasets},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        scales:{
+          x:{title:{display:true, text:rainfallCol}},
+          y:{title:{display:true, text:retentionCol}}
+        }
+      }
+    });
+    lines.push(`Regression scatter plotted: ${retentionCol} vs ${rainfallCol}${reg ? ` with fitted line (R² = ${reg.r2.toFixed(3)})` : ''}.`);
+  }
+
+  if(!lines.length) lines.push('No figures could be generated — check that the figure toggles are enabled and that Stage 1 data contains rainfall/outflow/retention columns.');
+  outEl.textContent = lines.join('\n');
+  showOutput(5);
 }
 
 function showOutput(stageIdx){
