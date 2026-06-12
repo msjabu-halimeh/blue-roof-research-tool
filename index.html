@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blue Roof Research Tool</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --navy:#0B1F3A;--navy2:#122848;--navy3:#1A3558;
+    --teal:#1D9E75;--teal2:#0F6E56;--teal-light:#E1F5EE;
+    --water:#378ADD;--water-light:#E6F1FB;
+    --sand:#F5F3EE;--white:#FFFFFF;
+    --muted:#6B7C93;--border:#D6E4F0;
+    --amber:#BA7517;--amber-light:#FAEEDA;
+    --coral:#D85A30;--coral-light:#FAECE7;
+    --green:#3B6D11;--green-light:#EAF3DE;
+    --pink:#993556;--pink-light:#FBEAF0;
+    --purple:#534AB7;--purple-light:#EEEDFE;
+  }
+  body{font-family:"Anthropic Sans",system-ui,sans-serif;background:var(--sand);color:var(--navy);min-height:100vh}
+
+  .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+
+  /* Sidebar */
+  .sidebar{background:var(--navy);color:#fff;display:flex;flex-direction:column;padding:0}
+  .sidebar-header{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08)}
+  .sidebar-logo{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:500;margin-bottom:6px}
+  .sidebar-title{font-size:17px;font-weight:500;line-height:1.3;color:#fff}
+  .sidebar-sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px}
+
+  .pipeline{padding:16px 0;flex:1;overflow-y:auto}
+  .pipe-stage{display:flex;align-items:flex-start;gap:0;padding:0 16px;cursor:pointer;position:relative}
+  .pipe-stage:hover .stage-label{color:#fff}
+  .pipe-spine{display:flex;flex-direction:column;align-items:center;width:32px;flex-shrink:0}
+  .pipe-dot{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);background:transparent;transition:all .25s;flex-shrink:0;margin-top:11px}
+  .pipe-dot.done{background:var(--teal);border-color:var(--teal)}
+  .pipe-dot.active{background:#fff;border-color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,0.15)}
+  .pipe-dot.new-badge{background:var(--pink);border-color:var(--pink)}
+  .pipe-line{width:2px;background:rgba(255,255,255,0.1);flex:1;min-height:8px;transition:background .25s}
+  .pipe-line.done{background:var(--teal)}
+  .stage-content{flex:1;padding:8px 0 8px 10px}
+  .stage-num{font-size:10px;color:rgba(255,255,255,0.3);font-weight:500;letter-spacing:.06em;margin-bottom:2px}
+  .stage-label{font-size:13px;color:rgba(255,255,255,0.6);font-weight:400;transition:color .2s;line-height:1.3}
+  .stage-label.active{color:#fff;font-weight:500}
+  .stage-label.done{color:rgba(255,255,255,0.75)}
+  .new-pill{display:inline-block;font-size:9px;background:var(--pink);color:#fff;padding:1px 5px;border-radius:4px;margin-left:6px;vertical-align:middle;letter-spacing:.04em;font-weight:500}
+
+  .sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08)}
+  .session-label{font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:6px}
+  .session-name{font-size:12px;color:rgba(255,255,255,0.6)}
+
+  /* Main */
+  .main{display:flex;flex-direction:column;overflow:hidden}
+  .topbar{background:#fff;border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+  .topbar-stage{font-size:13px;color:var(--muted)}
+  .topbar-stage strong{color:var(--navy);font-weight:500}
+  .progress-wrap{display:flex;align-items:center;gap:10px}
+  .progress-bar{width:140px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+  .progress-fill{height:100%;background:var(--teal);border-radius:3px;transition:width .4s ease}
+  .progress-label{font-size:12px;color:var(--muted)}
+
+  .content{flex:1;overflow-y:auto;padding:28px}
+
+  /* Stage panels */
+  .stage-panel{display:none}
+  .stage-panel.active{display:block}
+  .panel-header{margin-bottom:24px}
+  .panel-eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal2);font-weight:500;margin-bottom:6px}
+  .panel-title{font-size:22px;font-weight:500;color:var(--navy);line-height:1.2}
+  .panel-desc{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.6;max-width:600px}
+
+  /* Cards */
+  .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+  .card-title{font-size:13px;font-weight:500;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card-title i{color:var(--teal);font-size:16px}
+
+  /* Function chips */
+  .fn-grid{display:flex;flex-wrap:wrap;gap:8px}
+  .fn-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:monospace;background:var(--sand);border:1px solid var(--border);border-radius:6px;padding:5px 10px;color:var(--navy2);cursor:pointer;transition:all .15s}
+  .fn-chip:hover{background:var(--teal-light);border-color:var(--teal);color:var(--teal2)}
+  .fn-chip.running{background:var(--teal-light);border-color:var(--teal);color:var(--teal2)}
+  .fn-chip.done{background:var(--green-light);border-color:var(--green);color:var(--green)}
+  .fn-chip i{font-size:13px}
+
+  /* Input areas */
+  .input-area{width:100%;border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;font-family:inherit;color:var(--navy);background:#fff;resize:vertical;min-height:100px;outline:none;transition:border-color .2s}
+  .input-area:focus{border-color:var(--teal)}
+  .input-label{font-size:12px;font-weight:500;color:var(--navy2);margin-bottom:6px;display:block}
+
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;padding:9px 18px;border-radius:8px;border:none;cursor:pointer;transition:all .18s;font-family:inherit}
+  .btn-primary{background:var(--teal);color:#fff}
+  .btn-primary:hover{background:var(--teal2)}
+  .btn-secondary{background:#fff;color:var(--navy);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--teal);color:var(--teal2)}
+  .btn-row{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+
+  /* Output box */
+  .output-box{background:var(--sand);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.7;color:var(--navy2);min-height:60px;white-space:pre-wrap}
+  .output-box.empty{color:var(--muted);font-style:italic}
+
+  /* Stat row */
+  .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .stat-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center}
+  .stat-val{font-size:22px;font-weight:500;color:var(--navy)}
+  .stat-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* Journal table */
+  .journal-table{width:100%;border-collapse:collapse;font-size:13px}
+  .journal-table th{text-align:left;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .journal-table td{padding:10px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  .journal-table tr:last-child td{border-bottom:none}
+  .journal-table tr:hover td{background:var(--sand)}
+  .score-bar-wrap{display:flex;align-items:center;gap:8px}
+  .score-bar{height:6px;border-radius:3px;background:var(--teal)}
+  .fit-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:500}
+  .fit-high{background:var(--green-light);color:var(--green)}
+  .fit-med{background:var(--amber-light);color:var(--amber)}
+  .fit-low{background:var(--coral-light);color:var(--coral)}
+  .warn-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:var(--coral-light);color:var(--coral);font-weight:500}
+  .ok-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:var(--green-light);color:var(--green);font-weight:500}
+
+  /* Citation check */
+  .citation-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .citation-row:last-child{border-bottom:none}
+  .ci{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:11px}
+  .ci-ok{background:var(--green-light);color:var(--green)}
+  .ci-warn{background:var(--amber-light);color:var(--amber)}
+  .ci-text{font-size:13px;color:var(--navy2);line-height:1.5}
+  .ci-meta{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* Loader dot */
+  .loader{display:inline-flex;gap:4px;align-items:center}
+  .loader span{width:5px;height:5px;border-radius:50%;background:var(--teal);animation:ld .8s ease-in-out infinite}
+  .loader span:nth-child(2){animation-delay:.15s}
+  .loader span:nth-child(3){animation-delay:.3s}
+  @keyframes ld{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+  /* Tag */
+  .tag{display:inline-block;font-size:11px;padding:3px 8px;border-radius:5px;margin:2px;background:var(--water-light);color:var(--water);font-weight:400}
+
+  /* Toggle row */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+  .toggle-row:last-child{border-bottom:none}
+  .toggle-info{font-size:13px;color:var(--navy2)}
+  .toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .toggle{position:relative;width:34px;height:19px;flex-shrink:0}
+  .toggle input{opacity:0;width:0;height:0;position:absolute}
+  .toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:10px;cursor:pointer;transition:.2s}
+  .toggle input:checked+.toggle-slider{background:var(--teal)}
+  .toggle-slider:before{content:"";position:absolute;width:13px;height:13px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+  .toggle input:checked+.toggle-slider:before{transform:translateX(15px)}
+
+  /* Divider */
+  .divider{height:1px;background:var(--border);margin:20px 0}
+
+  .run-all-btn{background:var(--navy);color:#fff;font-size:13px;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:inherit;font-weight:500;transition:background .2s}
+  .run-all-btn:hover{background:var(--navy3)}
+
+  .next-btn{background:var(--teal);color:#fff;padding:10px 22px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:inherit;transition:background .2s}
+  .next-btn:hover{background:var(--teal2)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">Research AI</div>
+      <div class="sidebar-title">Blue Roof<br>Research Tool</div>
+      <div class="sidebar-sub">Environmental Science</div>
+    </div>
+    <nav class="pipeline" id="pipeline-nav"></nav>
+    <div class="sidebar-footer">
+      <div class="session-label">Current session</div>
+      <div class="session-name">Storm event study — May 2026</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-stage" id="topbar-label"><strong>Stage 1</strong> &mdash; Lab data ingestion</div>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+        <span class="progress-label" id="progress-label">0 / 9</span>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<script>
+const STAGES = [
+  {
+    id:'ingest', num:'01', label:'Lab data ingestion',
+    color:'teal', eyebrow:'Stage 1 of 9',
+    desc:'Upload raw sensor outputs from your blue roof instrumentation. The tool validates units, detects outliers, and normalises across measurement points.',
+    fns:['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'],
+    panel:'ingest'
+  },
+  {
+    id:'lit', num:'02', label:'Literature review',
+    color:'blue', eyebrow:'Stage 2 of 9',
+    desc:'Automated search across Scopus, Web of Science, and Google Scholar. Screens abstracts for relevance to your study parameters and builds a citation map.',
+    fns:['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'],
+    panel:'lit'
+  },
+  {
+    id:'stats', num:'03', label:'Statistical analysis',
+    color:'purple', eyebrow:'Stage 3 of 9',
+    desc:'Domain-specific functions for blue roof hydrology: runoff coefficient, peak flow attenuation, water retention volume, and pollutant load reduction.',
+    fns:['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'],
+    panel:'stats'
+  },
+  {
+    id:'context', num:'04', label:'Contextualisation',
+    color:'amber', eyebrow:'Stage 4 of 9',
+    desc:'Compares your results to published benchmarks and identifies where your findings diverge. Surfaces candidate explanations for the discussion section.',
+    fns:['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'],
+    panel:'context'
+  },
+  {
+    id:'draft', num:'05', label:'Paper drafting',
+    color:'coral', eyebrow:'Stage 5 of 9',
+    desc:'Generates each section independently. Methods and Results are written from data; Discussion draws on the contextualisation layer. References are auto-formatted.',
+    fns:['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'],
+    panel:'draft'
+  },
+  {
+    id:'viz', num:'06', label:'Visualisation',
+    color:'green', eyebrow:'Stage 6 of 9',
+    desc:'Produces publication-ready figures: hydrographs, retention heatmaps, and comparison tables. All outputs are exported at 300 dpi.',
+    fns:['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'],
+    panel:'viz'
+  },
+  {
+    id:'qa', num:'07', label:'Quality assurance',
+    color:'gray', eyebrow:'Stage 7 of 9',
+    desc:'Audits every claim in the discussion against your data and cited literature. Flags unsupported assertions and verifies data traceability before submission.',
+    fns:['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'],
+    panel:'qa'
+  },
+  {
+    id:'journal', num:'08', label:'Journal suggestion', isNew:true,
+    color:'pink', eyebrow:'Stage 8 of 9',
+    desc:'Scores the manuscript against journal scope, impact factor, and open-access requirements. Flags predatory publishers and estimates acceptance probability.',
+    fns:['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'],
+    panel:'journal'
+  },
+  {
+    id:'prep', num:'09', label:'Journal preparation',
+    color:'teal', eyebrow:'Stage 9 of 9',
+    desc:'Reformats the manuscript to the target journal\'s style guide, generates the cover letter, and compiles the supplementary data package.',
+    fns:['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'],
+    panel:'prep'
+  }
+];
+
+let currentStage = 0;
+let completedStages = new Set();
+let runningFns = {};
+
+function buildSidebar(){
+  const nav = document.getElementById('pipeline-nav');
+  nav.innerHTML = STAGES.map((s,i)=>`
+    <div class="pipe-stage" onclick="goToStage(${i})" id="nav-stage-${i}">
+      <div class="pipe-spine">
+        <div class="pipe-dot ${s.isNew?'new-badge':''}" id="dot-${i}"></div>
+        ${i<STAGES.length-1?`<div class="pipe-line" id="line-${i}"></div>`:''}
+      </div>
+      <div class="stage-content">
+        <div class="stage-num">${s.num}</div>
+        <div class="stage-label" id="slabel-${i}">${s.label}${s.isNew?'<span class="new-pill">NEW</span>':''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function buildContent(){
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    ${panelIngest()}
+    ${panelLit()}
+    ${panelStats()}
+    ${panelContext()}
+    ${panelDraft()}
+    ${panelViz()}
+    ${panelQA()}
+    ${panelJournal()}
+    ${panelPrep()}
+  `;
+}
+
+function panelIngest(){return `<div class="stage-panel" id="panel-0">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 1 of 9 &mdash; Lab data ingestion</div>
+    <div class="panel-title">Upload lab results</div>
+    <div class="panel-desc">Paste or upload raw sensor data from your blue roof monitoring rig. The tool will detect units, flag anomalies, and normalise across all measurement points before any analysis runs.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Raw sensor data</div>
+    <label class="input-label">Paste CSV or structured data output</label>
+    <textarea class="input-area" id="lab-input" placeholder="timestamp, rainfall_mm, outflow_L/s, retention_%, temp_C&#10;2026-05-14 09:00, 12.4, 0.82, 93.4, 18.2&#10;2026-05-14 09:15, 14.1, 0.91, 92.8, 18.4&#10;..."></textarea>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(0,['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run all ingestion functions
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-0">
+      ${fnChips(0,['parse_lab_results()','validate_data()','flag_outliers()','normalise_units()'])}
+    </div>
+  </div>
+  <div class="card" id="output-card-0" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Ingestion results</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val">847</div><div class="stat-lbl">Rows parsed</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--amber)">3</div><div class="stat-lbl">Outliers flagged</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--teal)">100%</div><div class="stat-lbl">Unit normalised</div></div>
+    </div>
+    <div class="output-box">Data validated. 847 timestep records ingested across 5 sensor channels.
+3 outliers flagged at t=09:45, t=14:20, t=22:10 — likely sensor dropout events.
+All flow rates converted to L/s. Rainfall normalised to mm/15min intervals.
+Ready to proceed to statistical analysis.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(0)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: literature review</button></div>
+</div>`;}
+
+function panelLit(){return `<div class="stage-panel" id="panel-1">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 2 of 9 &mdash; Literature review</div>
+    <div class="panel-title">Literature search</div>
+    <div class="panel-desc">Define your study parameters and the tool will query Scopus, Web of Science, and Google Scholar. Abstract screening filters to relevant papers, and citation mapping reveals the key studies you must position against.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-search" aria-hidden="true"></i> Search parameters</div>
+    <label class="input-label">Key topics</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      <span class="tag">blue roof</span><span class="tag">stormwater retention</span><span class="tag">urban hydrology</span><span class="tag">peak flow attenuation</span><span class="tag">green-blue hybrid</span><span class="tag">water balance</span>
+    </div>
+    <label class="input-label">Publication year range</label>
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <input type="number" value="2015" style="width:90px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;color:var(--navy)">
+      <span style="align-self:center;color:var(--muted)">to</span>
+      <input type="number" value="2026" style="width:90px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;color:var(--navy)">
+    </div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(1,['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run literature review
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-1">${fnChips(1,['search_databases()','screen_abstracts()','extract_findings()','build_citation_map()'])}</div>
+  </div>
+  <div class="card" id="output-card-1" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Literature results</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val">312</div><div class="stat-lbl">Papers found</div></div>
+      <div class="stat-card"><div class="stat-val">47</div><div class="stat-lbl">Passed screening</div></div>
+      <div class="stat-card"><div class="stat-val">12</div><div class="stat-lbl">Core citations</div></div>
+    </div>
+    <div class="output-box">312 papers retrieved. After abstract screening, 47 are relevant to blue roof retention performance.
+Key benchmark studies identified: Stovin et al. (2017), Shafique et al. (2018), Johannessen et al. (2019).
+Citation map built. Your study must position against: median retention 78–91% in temperate climates.
+Ready to run statistical analysis against these benchmarks.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(1)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: statistical analysis</button></div>
+</div>`;}
+
+function panelStats(){return `<div class="stage-panel" id="panel-2">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 3 of 9 &mdash; Statistical analysis</div>
+    <div class="panel-title">Run analysis</div>
+    <div class="panel-desc">Domain-specific hydrological calculations. Each function targets a named metric from the blue roof literature — outputs are directly interpretable against published benchmarks.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-settings" aria-hidden="true"></i> Analysis settings</div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Runoff coefficient (Cr)</div><div class="toggle-sub">Ratio of outflow to total rainfall input</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Peak flow attenuation</div><div class="toggle-sub">Reduction in peak discharge vs. conventional roof</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Water retention volume</div><div class="toggle-sub">Total stormwater retained per event</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Pollutant load reduction</div><div class="toggle-sub">TSS, TN, TP removal rates</div></div>
+      <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(2,['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run analysis
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-2">${fnChips(2,['run_descriptive_stats()','test_hypotheses()','run_regression()','calculate_water_balance()'])}</div>
+  </div>
+  <div class="card" id="output-card-2" style="display:none">
+    <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Analysis results</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val">0.08</div><div class="stat-lbl">Runoff coefficient</div></div>
+      <div class="stat-card"><div class="stat-val">67%</div><div class="stat-lbl">Peak attenuation</div></div>
+      <div class="stat-card"><div class="stat-val">89.2%</div><div class="stat-lbl">Retention rate</div></div>
+    </div>
+    <div class="output-box">Runoff coefficient Cr = 0.08 (SD ±0.02) across 23 storm events.
+Peak flow attenuation: 67% reduction vs. impervious reference (p &lt; 0.001).
+Mean retention: 89.2%. Linear regression shows retention declines 0.4% per mm of antecedent rainfall (R² = 0.71).
+Water balance closure: 97.3%. Results ready for contextualisation.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(2)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: contextualisation</button></div>
+</div>`;}
+
+function panelContext(){return `<div class="stage-panel" id="panel-3">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 4 of 9 &mdash; Contextualisation</div>
+    <div class="panel-title">Compare and interpret</div>
+    <div class="panel-desc">Your results are compared against the benchmarks identified in the literature review. The tool flags where your findings diverge and generates candidate explanations for the discussion.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-3">${fnChips(3,['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'])}</div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(3,['compare_to_benchmarks()','identify_gaps()','generate_hypotheses()','assess_significance()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run contextualisation
+      </button>
+    </div>
+  </div>
+  <div class="card" id="output-card-3" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Interpretation</div>
+    <div class="output-box">Retention rate of 89.2% is above the temperate benchmark range (78–91%). Study falls in the upper quartile.
+Peak attenuation of 67% exceeds Stovin et al. (2017) by 12 percentage points. Likely attributable to deeper substrate depth (150mm vs. 80mm reference).
+Gap identified: antecedent moisture condition not reported in 8 of 12 benchmark studies — limits direct comparability.
+Candidate hypotheses for discussion: (1) substrate depth effect, (2) Dubai arid-climate reduced antecedent saturation, (3) drainage layer configuration.
+Statistical significance confirmed for all primary metrics (p &lt; 0.05).</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(3)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: paper drafting</button></div>
+</div>`;}
+
+function panelDraft(){return `<div class="stage-panel" id="panel-4">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 5 of 9 &mdash; Paper drafting</div>
+    <div class="panel-title">Draft the manuscript</div>
+    <div class="panel-desc">Each section is drafted independently. Methods and Results draw directly from your data. Discussion pulls from the contextualisation layer. References are formatted to your target journal style.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-file-text" aria-hidden="true"></i> Draft options</div>
+    <label class="input-label">Target journal style (for reference formatting)</label>
+    <select style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;color:var(--navy);margin-bottom:14px">
+      <option>Journal of Hydrology (Elsevier)</option>
+      <option>Urban Water Journal (Taylor & Francis)</option>
+      <option>Water Resources Research (AGU)</option>
+      <option>Science of the Total Environment</option>
+    </select>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(4,['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Draft all sections
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-4">${fnChips(4,['draft_abstract()','write_methods()','write_results()','write_discussion()','format_references()'])}</div>
+  </div>
+  <div class="card" id="output-card-4" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Draft status</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val">4,820</div><div class="stat-lbl">Words drafted</div></div>
+      <div class="stat-card"><div class="stat-val">5</div><div class="stat-lbl">Sections complete</div></div>
+      <div class="stat-card"><div class="stat-val">23</div><div class="stat-lbl">References formatted</div></div>
+    </div>
+    <div class="output-box">Abstract: 248 words. Structured as background / methods / key results / significance.
+Methods section draws from validated ingestion data and documented protocol.
+Results section is purely descriptive — no interpretive language present.
+Discussion integrates 11 of 47 screened papers. 3 claims flagged for QA review.
+References formatted to Journal of Hydrology author guidelines.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(4)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: visualisation</button></div>
+</div>`;}
+
+function panelViz(){return `<div class="stage-panel" id="panel-5">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 6 of 9 &mdash; Visualisation</div>
+    <div class="panel-title">Generate figures</div>
+    <div class="panel-desc">Publication-ready figures generated programmatically from your lab data. Hydrographs and retention heatmaps are the signature figures in blue roof literature.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Figure selection</div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Inflow vs. outflow hydrograph</div><div class="toggle-sub">Storm event time series</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Retention rate heatmap</div><div class="toggle-sub">By event size and antecedent conditions</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Benchmark comparison table</div><div class="toggle-sub">Your results vs. published studies</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Regression scatter plot</div><div class="toggle-sub">Retention vs. antecedent rainfall</div></div>
+      <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(5,['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Generate figures
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-5">${fnChips(5,['plot_hydrograph()','generate_heatmap()','create_comparison_table()','export_figures()'])}</div>
+  </div>
+  <div class="card" id="output-card-5" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Figures generated</div>
+    <div class="output-box">3 figures exported at 300 dpi (TIFF and EPS formats).
+Fig. 1 — Inflow/outflow hydrograph across 23 storm events.
+Fig. 2 — Retention heatmap (event depth × antecedent moisture index).
+Fig. 3 — Comparison table: this study vs. Stovin 2017, Shafique 2018, Johannessen 2019.
+All figures meet journal minimum resolution requirements.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(5)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: quality assurance</button></div>
+</div>`;}
+
+function panelQA(){return `<div class="stage-panel" id="panel-6">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 7 of 9 &mdash; Quality assurance</div>
+    <div class="panel-title">Audit the manuscript</div>
+    <div class="panel-desc">Every claim in the discussion is traced back to either your lab data or a cited source. Orphaned assertions are flagged before submission.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-6">${fnChips(6,['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'])}</div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(6,['check_citation_accuracy()','flag_unsupported_claims()','verify_data_traceability()','audit_methods()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run QA audit
+      </button>
+    </div>
+  </div>
+  <div class="card" id="output-card-6" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Audit results</div>
+    <div class="citation-row">
+      <div class="ci ci-ok"><i class="ti ti-check" aria-hidden="true"></i></div>
+      <div><div class="ci-text">All 23 references verified against source databases</div><div class="ci-meta">check_citation_accuracy() — passed</div></div>
+    </div>
+    <div class="citation-row">
+      <div class="ci ci-warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+      <div><div class="ci-text">1 claim requires stronger citation: "blue roofs reduce urban heat island effect" — not directly supported by your data</div><div class="ci-meta">flag_unsupported_claims() — 1 flag</div></div>
+    </div>
+    <div class="citation-row">
+      <div class="ci ci-ok"><i class="ti ti-check" aria-hidden="true"></i></div>
+      <div><div class="ci-text">Data traceability confirmed — all results traceable to raw sensor timestamps</div><div class="ci-meta">verify_data_traceability() — passed</div></div>
+    </div>
+    <div class="citation-row">
+      <div class="ci ci-ok"><i class="ti ti-check" aria-hidden="true"></i></div>
+      <div><div class="ci-text">Methods section fully auditable against lab protocol documentation</div><div class="ci-meta">audit_methods() — passed</div></div>
+    </div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(6)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: journal suggestion</button></div>
+</div>`;}
+
+function panelJournal(){return `<div class="stage-panel" id="panel-7">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 8 of 9 &mdash; Journal suggestion <span class="new-pill">NEW</span></div>
+    <div class="panel-title">Find the right journal</div>
+    <div class="panel-desc">The manuscript is scored against journal scope, impact factor, open-access policy, and acceptance rate. Predatory publishers are flagged automatically.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-settings" aria-hidden="true"></i> Preferences</div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Require open access</div><div class="toggle-sub">Funder mandate or author preference</div></div>
+      <label class="toggle"><input type="checkbox" id="oa-toggle"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Prioritise impact factor</div><div class="toggle-sub">Rank by IF over acceptance rate</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-info">Include regional journals</div><div class="toggle-sub">Middle East / MENA water science</div></div>
+      <label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(7,['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Run journal scoring
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-7">${fnChips(7,['suggest_journal()','score_scope_fit()','rank_by_impact_factor()','check_open_access_policy()','estimate_acceptance_rate()','flag_predatory_journals()'])}</div>
+  </div>
+  <div class="card" id="output-card-7" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Journal shortlist</div>
+    <table class="journal-table">
+      <thead><tr><th>Journal</th><th>Scope fit</th><th>IF</th><th>Accept. rate</th><th>OA</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Journal of Hydrology</strong><br><span style="font-size:11px;color:var(--muted)">Elsevier</span></td>
+          <td><div class="score-bar-wrap"><div class="score-bar" style="width:72px"></div><span style="font-size:12px;color:var(--muted)">96%</span></div></td>
+          <td>6.7</td>
+          <td>28%</td>
+          <td><span class="ok-badge">Hybrid</span></td>
+          <td><span class="fit-badge fit-high">Top pick</span></td>
+        </tr>
+        <tr>
+          <td><strong>Urban Water Journal</strong><br><span style="font-size:11px;color:var(--muted)">Taylor & Francis</span></td>
+          <td><div class="score-bar-wrap"><div class="score-bar" style="width:64px"></div><span style="font-size:12px;color:var(--muted)">88%</span></div></td>
+          <td>3.4</td>
+          <td>41%</td>
+          <td><span class="ok-badge">Hybrid</span></td>
+          <td><span class="fit-badge fit-high">Recommended</span></td>
+        </tr>
+        <tr>
+          <td><strong>Science of Total Environment</strong><br><span style="font-size:11px;color:var(--muted)">Elsevier</span></td>
+          <td><div class="score-bar-wrap"><div class="score-bar" style="width:56px"></div><span style="font-size:12px;color:var(--muted)">76%</span></div></td>
+          <td>9.8</td>
+          <td>22%</td>
+          <td><span class="ok-badge">Hybrid</span></td>
+          <td><span class="fit-badge fit-med">Consider</span></td>
+        </tr>
+        <tr>
+          <td><strong>Water Resources Research</strong><br><span style="font-size:11px;color:var(--muted)">AGU</span></td>
+          <td><div class="score-bar-wrap"><div class="score-bar" style="width:44px"></div><span style="font-size:12px;color:var(--muted)">60%</span></div></td>
+          <td>5.4</td>
+          <td>35%</td>
+          <td><span class="ok-badge">Full OA</span></td>
+          <td><span class="fit-badge fit-low">Lower fit</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:12px;font-size:12px;color:var(--muted)">No predatory publishers detected in shortlist. Beall's list cross-check passed.</div>
+  </div>
+  <div class="btn-row"><button class="next-btn" onclick="completeAndNext(7)"><i class="ti ti-arrow-right" aria-hidden="true"></i> Next: journal preparation</button></div>
+</div>`;}
+
+function panelPrep(){return `<div class="stage-panel" id="panel-8">
+  <div class="panel-header">
+    <div class="panel-eyebrow">Stage 9 of 9 &mdash; Journal preparation</div>
+    <div class="panel-title">Prepare for submission</div>
+    <div class="panel-desc">Reformats the manuscript to the selected journal's style guide, generates the cover letter, compiles supplementary data, and confirms word count compliance.</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-settings" aria-hidden="true"></i> Target journal</div>
+    <select style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;color:var(--navy);margin-bottom:14px">
+      <option>Journal of Hydrology (Elsevier) — top pick</option>
+      <option>Urban Water Journal (Taylor & Francis)</option>
+    </select>
+    <div class="btn-row">
+      <button class="run-all-btn" onclick="runFunctions(8,['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'])">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Prepare submission
+      </button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Functions</div>
+    <div class="fn-grid" id="fns-8">${fnChips(8,['format_for_journal()','generate_cover_letter()','compile_supplementary()','check_word_count()'])}</div>
+  </div>
+  <div class="card" id="output-card-8" style="display:none">
+    <div class="card-title"><i class="ti ti-check" aria-hidden="true"></i> Submission package ready</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val" style="color:var(--teal)">Ready</div><div class="stat-lbl">Manuscript formatted</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--teal)">Ready</div><div class="stat-lbl">Cover letter</div></div>
+      <div class="stat-card"><div class="stat-val">4,820</div><div class="stat-lbl">Words (limit 6,000)</div></div>
+    </div>
+    <div class="output-box">Manuscript reformatted to Journal of Hydrology author guidelines.
+Line spacing, margin, and font requirements met.
+Cover letter drafted: highlights upper-quartile retention performance and gap in arid-climate blue roof literature.
+Supplementary data package: raw sensor CSV, outlier log, R analysis script.
+Word count: 4,820 / 6,000 limit. Ready for upload to Editorial Manager.</div>
+  </div>
+  <div class="card" id="complete-card" style="display:none;background:var(--teal-light);border-color:var(--teal)">
+    <div class="card-title" style="color:var(--teal2)"><i class="ti ti-trophy" aria-hidden="true"></i> Research pipeline complete</div>
+    <div style="font-size:13px;color:var(--teal2);line-height:1.6">All 9 stages complete. Your manuscript, figures, and submission package are ready. Review the QA flag on the UHI claim before uploading.</div>
+  </div>
+</div>`;}
+
+function fnChips(stageIdx, fns){
+  return fns.map(fn=>`<span class="fn-chip" id="fn-${stageIdx}-${fn.replace(/[()]/g,'')}" onclick="runSingleFn(${stageIdx},'${fn}')"><i class="ti ti-terminal-2" aria-hidden="true"></i>${fn}</span>`).join('');
+}
+
+function goToStage(idx){
+  currentStage = idx;
+  document.querySelectorAll('.stage-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+  document.querySelectorAll('.stage-label').forEach((l,i)=>{
+    l.classList.toggle('active',i===idx);
+  });
+  const s = STAGES[idx];
+  document.getElementById('topbar-label').innerHTML = `<strong>Stage ${idx+1}</strong> &mdash; ${s.label}`;
+  window.scrollTo && document.querySelector('.content').scrollTo(0,0);
+}
+
+function runSingleFn(stageIdx, fn){
+  const id = `fn-${stageIdx}-${fn.replace(/[()]/g,'')}`;
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.classList.add('running');
+  el.innerHTML = `<span class="loader"><span></span><span></span><span></span></span> ${fn}`;
+  setTimeout(()=>{
+    el.classList.remove('running');
+    el.classList.add('done');
+    el.innerHTML = `<i class="ti ti-check" aria-hidden="true"></i> ${fn}`;
+  }, 900 + Math.random()*600);
+}
+
+function runFunctions(stageIdx, fns){
+  fns.forEach((fn,i)=>{
+    setTimeout(()=>runSingleFn(stageIdx,fn), i*500);
+  });
+  const total = fns.length * 500 + 1500;
+  setTimeout(()=>showOutput(stageIdx), total);
+}
+
+function showOutput(stageIdx){
+  const card = document.getElementById(`output-card-${stageIdx}`);
+  if(card){ card.style.display='block'; card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+
+function completeAndNext(idx){
+  completedStages.add(idx);
+  updateProgress();
+  updateDots();
+  if(idx < STAGES.length-1) goToStage(idx+1);
+  else{
+    const cc = document.getElementById('complete-card');
+    if(cc) cc.style.display='block';
+  }
+}
+
+function updateProgress(){
+  const pct = Math.round((completedStages.size/STAGES.length)*100);
+  document.getElementById('progress-fill').style.width = pct+'%';
+  document.getElementById('progress-label').textContent = `${completedStages.size} / ${STAGES.length}`;
+}
+
+function updateDots(){
+  STAGES.forEach((s,i)=>{
+    const dot = document.getElementById(`dot-${i}`);
+    const lbl = document.getElementById(`slabel-${i}`);
+    const line = document.getElementById(`line-${i}`);
+    if(!dot) return;
+    if(completedStages.has(i)){
+      dot.classList.remove('active','new-badge');
+      dot.classList.add('done');
+      if(lbl){lbl.classList.add('done');}
+      if(line){line.classList.add('done');}
+    } else if(i===currentStage){
+      dot.classList.add('active');
+    } else {
+      dot.classList.remove('active','done');
+      if(s.isNew) dot.classList.add('new-badge');
+    }
+  });
+}
+
+buildSidebar();
+buildContent();
+goToStage(0);
+updateDots();
+</script>
+</body>
+</html>
